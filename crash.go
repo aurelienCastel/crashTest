@@ -4,11 +4,71 @@ import "fmt"
 import "io/ioutil"
 import "os"
 
-// TODO: Add a function that return a Callable with initialised maps.
-type Callable struct {
+// TODO: replace map[string]string everywhere by a list of type.
+// TODO: The get_test_info that crate the TestInfo struct add
+//       a null callable at the end of the callable array,
+//       (because there is no more callable to be found)
+//       should be removed.
+type Function struct {
+	name string
+	args map[string]string
+}
+
+func new_function() Function {
+	var function Function
+	function.args = make(map[string]string)
+	return function
+}
+
+func (function Function) call_string() string {
+	var call_string string
+	var i int = 0
+
+	call_string += function.name + "("
+	for arg_name, arg_type := range function.args {
+		call_string += arg_name + " " + arg_type
+		i++
+		if i < len(function.args) {
+			call_string += ", "
+		}
+	}
+	call_string += ")"
+	return call_string
+}
+
+type Method struct {
 	name     string
 	receiver map[string]string
 	args     map[string]string
+}
+
+func new_method() Method {
+	var method Method
+	method.args = make(map[string]string)
+	return method
+}
+
+func (method Method) call_string() string {
+	var call_string string
+	var i int = 0
+
+	for receiver_name, receiver_type := range method.receiver {
+		call_string += "(" + receiver_name + receiver_type + ")"
+	}
+	call_string += "." + method.name + "("
+	for arg_name, arg_type := range method.args {
+		call_string += arg_name + " " + arg_type
+		i++
+		if i < len(method.args) {
+			call_string += ", "
+		}
+	}
+	call_string += ")"
+	return call_string
+}
+
+type Callable interface {
+	call_string() string
 }
 
 type TestInfo struct {
@@ -57,7 +117,6 @@ func skip_string(file_content string, parser_pos int) int {
 
 	if string_start == '"' || string_start == '`' {
 		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
-			fmt.Printf("%c", file_content[parser_pos])
 			if file_content[parser_pos] == string_start {
 				return parser_pos + 1
 			}
@@ -166,9 +225,10 @@ func find_package_name(file_content string, parser_pos int) (int, string) {
 	return new_pos, package_name
 }
 
+// TODO: handle pointers in arguments types
 // TODO: handle variadic arguments
 func find_function(file_content string, parser_pos int) (int, Callable) {
-	var function Callable
+	var function Function
 	parser_pos, function.name = find_next_token(file_content, parser_pos)
 	function.args = make(map[string]string)
 	var arg_name string
@@ -190,9 +250,10 @@ func find_function(file_content string, parser_pos int) (int, Callable) {
 	return parser_pos, function
 }
 
+// TODO: handle pointers in arguments types
 // TODO: handle variadic arguments
-func find_method(file_content string, parser_pos int) (int, Callable) {
-	var method Callable
+func find_method(file_content string, parser_pos int) (int, Method) {
+	var method Method
 	var arg_name string
 	var arg_type string
 	var token string
@@ -278,17 +339,8 @@ func main() {
 
 	fmt.Println("Package : " + test_info.package_name)
 	fmt.Println("Lang : " + test_info.lang)
-	for _, function := range test_info.callables {
-		fmt.Print(function.name + "(")
-		var i int = 0
-		for arg_name, arg_type := range function.args {
-			fmt.Print(arg_name + " " + arg_type)
-			i++
-			if i < len(function.args) {
-				fmt.Print(", ")
-			}
-		}
-		fmt.Println(")")
+	for _, callable := range test_info.callables {
+		fmt.Println(callable.call_string())
 	}
 
 	// Create temp dir?
