@@ -4,19 +4,23 @@ import "fmt"
 import "io/ioutil"
 import "os"
 
-// TODO: replace map[string]string everywhere by a list of type.
 // TODO: The get_test_info that crate the TestInfo struct add
 //       a null callable at the end of the callable array,
 //       (because there is no more callable to be found)
 //       should be removed.
+type Argument struct {
+	name  string
+	_type string
+}
+
 type Function struct {
-	name string
-	args map[string]string
+	name      string
+	arguments []Argument
 }
 
 func new_function() Function {
 	var function Function
-	function.args = make(map[string]string)
+	function.arguments = make([]Argument, 0, 2)
 	return function
 }
 
@@ -25,10 +29,10 @@ func (function Function) call_string() string {
 	var i int = 0
 
 	call_string += function.name + "("
-	for arg_name, arg_type := range function.args {
-		call_string += arg_name + " " + arg_type
+	for _, argument := range function.arguments {
+		call_string += argument.name + " " + argument._type
 		i++
-		if i < len(function.args) {
+		if i < len(function.arguments) {
 			call_string += ", "
 		}
 	}
@@ -37,14 +41,14 @@ func (function Function) call_string() string {
 }
 
 type Method struct {
-	name     string
-	receiver map[string]string
-	args     map[string]string
+	name      string
+	receiver  Argument
+	arguments []Argument
 }
 
 func new_method() Method {
 	var method Method
-	method.args = make(map[string]string)
+	method.arguments = make([]Argument, 0, 2)
 	return method
 }
 
@@ -52,14 +56,12 @@ func (method Method) call_string() string {
 	var call_string string
 	var i int = 0
 
-	for receiver_name, receiver_type := range method.receiver {
-		call_string += "(" + receiver_name + receiver_type + ")"
-	}
+	call_string += "(" + method.receiver.name + " " + method.receiver._type + ")"
 	call_string += "." + method.name + "("
-	for arg_name, arg_type := range method.args {
-		call_string += arg_name + " " + arg_type
+	for _, argument := range method.arguments {
+		call_string += argument.name + " " + argument._type
 		i++
-		if i < len(method.args) {
+		if i < len(method.arguments) {
 			call_string += ", "
 		}
 	}
@@ -228,24 +230,23 @@ func find_package_name(file_content string, parser_pos int) (int, string) {
 // TODO: handle pointers in arguments types
 // TODO: handle variadic arguments
 func find_function(file_content string, parser_pos int) (int, Callable) {
-	var function Function
-	parser_pos, function.name = find_next_token(file_content, parser_pos)
-	function.args = make(map[string]string)
-	var arg_name string
-	var arg_type string
+	var function Function = new_function()
+	var argument Argument
 	var token string
+
+	parser_pos, function.name = find_next_token(file_content, parser_pos)
 	for {
 		parser_pos, token = find_next_token(file_content, parser_pos) // Skip '(' | ',' | ')'
 		if token == ")" {
-			break // Stop at the end of args
+			break // Stop at the end of arguments
 		}
-		parser_pos, arg_name = find_next_token(file_content, parser_pos)
-		if arg_name == ")" {
-			break // Stop at the end of args
+		parser_pos, argument.name = find_next_token(file_content, parser_pos)
+		if argument.name == ")" {
+			break // Stop at the end of arguments
 		}
-		parser_pos, arg_type = find_next_token(file_content, parser_pos)
+		parser_pos, argument._type = find_next_token(file_content, parser_pos)
 
-		function.args[arg_name] = arg_type
+		function.arguments = append(function.arguments, argument)
 	}
 	return parser_pos, function
 }
@@ -253,24 +254,26 @@ func find_function(file_content string, parser_pos int) (int, Callable) {
 // TODO: handle pointers in arguments types
 // TODO: handle variadic arguments
 func find_method(file_content string, parser_pos int) (int, Method) {
-	var method Method
-	var arg_name string
-	var arg_type string
+	var method Method = new_method()
+	var argument Argument
 	var token string
-	method.args = make(map[string]string)
+
+	parser_pos, token = find_next_token(file_content, parser_pos) // Skip '('
+	parser_pos, method.receiver.name = find_next_token(file_content, parser_pos)
+	parser_pos, method.receiver._type = find_next_token(file_content, parser_pos)
 
 	for {
 		parser_pos, token = find_next_token(file_content, parser_pos) // Skip '(' | ',' | ')'
 		if token == ")" {
-			break // Stop at the end of args
+			break // Stop at the end of arguments
 		}
-		parser_pos, arg_name = find_next_token(file_content, parser_pos)
-		if arg_name == ")" {
-			break // Stop at the end of args
+		parser_pos, argument.name = find_next_token(file_content, parser_pos)
+		if argument.name == ")" {
+			break // Stop at the end of arguments
 		}
-		parser_pos, arg_type = find_next_token(file_content, parser_pos)
+		parser_pos, argument._type = find_next_token(file_content, parser_pos)
 
-		method.args[arg_name] = arg_type
+		method.arguments = append(method.arguments, argument)
 	}
 	parser_pos, method.name = find_next_token(file_content, parser_pos)
 	return parser_pos, method
@@ -308,6 +311,7 @@ func get_test_info_from_go(file_content string) TestInfo {
 		parser_pos, function = find_callable(file_content, parser_pos)
 		test_info.callables = append(test_info.callables, function)
 	}
+	test_info.callables = test_info.callables[0 : len(test_info.callables)-1]
 	return test_info
 }
 
