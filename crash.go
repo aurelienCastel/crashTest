@@ -4,10 +4,6 @@ import "fmt"
 import "io/ioutil"
 import "os"
 
-// TODO: The get_test_info that crate the TestInfo struct add
-//       a null callable at the end of the callable array,
-//       (because there is no more callable to be found)
-//       should be removed.
 type Argument struct {
 	name  string
 	_type string
@@ -112,12 +108,22 @@ func skip_spaces(file_content string, parser_pos int) int {
 	return parser_pos
 }
 
-// TODO: Handle the case of \" in strings
 // TODO: Should I do something when a string never end?
 func skip_string(file_content string, parser_pos int) int {
 	var string_start byte = file_content[parser_pos]
 
-	if string_start == '"' || string_start == '`' {
+	// Handle the case of \ in strings
+	if string_start == '"' {
+		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
+			if file_content[parser_pos] == '\\' {
+				parser_pos++
+				continue
+			}
+			if file_content[parser_pos] == string_start {
+				return parser_pos + 1
+			}
+		}
+	} else if string_start == '`' {
 		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
 			if file_content[parser_pos] == string_start {
 				return parser_pos + 1
@@ -127,7 +133,6 @@ func skip_string(file_content string, parser_pos int) int {
 	return parser_pos
 }
 
-// TODO: Handle nested comments
 // TODO: Should I do something when a comment never end?
 func skip_comment(file_content string, parser_pos int) int {
 	comment_map := map[string]string{
@@ -217,6 +222,31 @@ func find_next_token(file_content string, parser_pos int) (int, string) {
 	return parser_pos, string(token)
 }
 
+func find_next_type_recursive(file_content string, parser_pos int) int {
+	parser_pos, token = find_next_token(file_content, parser_pos)
+	switch token {
+	case ".":
+		find_next_type_recursive(file_content, parser_pos)
+	case "*":
+		find_next_type_recursive(file_content, parser_pos)
+	case "map":
+		break // (Find matching [] then,) Repeat the function
+	case "[":
+		break // Find matching [], then, Repeat the function
+	case "chan":
+		find_next_type_recursive(file_content, parser_pos)
+	case "func":
+		break // Find matching (), then, Repeat the function
+	default:
+		return parser_pos
+	}
+}
+
+func find_next_type(file_content string, parser_pos int) (int, string) {
+	end_pos := find_next_type_recursive(file_content, parser_pos)
+	return file_content[parser_pos:end_pos]
+}
+
 func find_package_name(file_content string, parser_pos int) (int, string) {
 	var package_name string = ""
 	var new_pos, matched = match_token("package", file_content, parser_pos)
@@ -227,8 +257,6 @@ func find_package_name(file_content string, parser_pos int) (int, string) {
 	return new_pos, package_name
 }
 
-// TODO: handle pointers in arguments types
-// TODO: handle variadic arguments
 func find_function(file_content string, parser_pos int) (int, Callable) {
 	var function Function = new_function()
 	var argument Argument
@@ -252,6 +280,13 @@ func find_function(file_content string, parser_pos int) (int, Callable) {
 }
 
 // TODO: handle pointers in arguments types
+// TODO: handle array in arguments types
+// TODO: handle multidimentional array in arguments types
+// TODO: handle slice in arguments types ?
+// TODO: handle map in arguments types
+// TODO: handle multidimentional map in arguments types
+// TODO: handle channel in arguments types
+// TODO: handle function in arguments types
 // TODO: handle variadic arguments
 func find_method(file_content string, parser_pos int) (int, Method) {
 	var method Method = new_method()
