@@ -1,3 +1,6 @@
+// TODO: for now the program assume you don't have syntax errors
+// should I add error handling of syntax error in the parsed code?
+
 package main
 
 import "fmt"
@@ -194,6 +197,42 @@ func match_token(target string, file_content string, parser_pos int) (int, bool)
 	return parser_pos, false
 }
 
+// You should call this BEFORE the parser_pos is on an opening token.
+// TODO: closing don't match opening -> the parsed code have a syntax error
+// opening never found -> there is a problem with MY code
+func match_closing(opening string, closing string, file_content string, parser_pos int) (int, bool) {
+	var i int = 0
+	var j int = 0
+	var nesting_level int = 0
+
+	for ; parser_pos < len(file_content); parser_pos++ {
+		if file_content[parser_pos] == opening[i] {
+			i++
+			if i == len(opening) {
+				nesting_level++
+				i = 0
+				j = 0
+			}
+		} else {
+			i = 0
+		}
+		if file_content[parser_pos] == closing[j] {
+			j++
+			if j == len(closing) {
+				nesting_level--
+				if nesting_level == 0 {
+					return parser_pos, true
+				}
+				i = 0
+				j = 0
+			}
+		} else {
+			j = 0
+		}
+	}
+	return parser_pos, false
+}
+
 // You should skip non-code before calling this
 func find_next_token(file_content string, parser_pos int) (int, string) {
 	var token []byte
@@ -223,28 +262,36 @@ func find_next_token(file_content string, parser_pos int) (int, string) {
 }
 
 func find_next_type_recursive(file_content string, parser_pos int) int {
+	var token string
 	parser_pos, token = find_next_token(file_content, parser_pos)
 	switch token {
-	case ".":
-		find_next_type_recursive(file_content, parser_pos)
-	case "*":
-		find_next_type_recursive(file_content, parser_pos)
-	case "map":
-		break // (Find matching [] then,) Repeat the function
 	case "[":
-		break // Find matching [], then, Repeat the function
+		{
+			parser_pos, _ = match_closing(token, "]", file_content, parser_pos-1)
+			parser_pos = find_next_type_recursive(file_content, parser_pos)
+		}
+	case "(":
+		{
+			parser_pos, _ = match_closing(token, ")", file_content, parser_pos-1)
+			parser_pos = find_next_type_recursive(file_content, parser_pos)
+		}
+	case ".":
+		parser_pos = find_next_type_recursive(file_content, parser_pos)
+	case "*":
+		parser_pos = find_next_type_recursive(file_content, parser_pos)
+	case "map":
+		parser_pos = find_next_type_recursive(file_content, parser_pos)
 	case "chan":
-		find_next_type_recursive(file_content, parser_pos)
+		parser_pos = find_next_type_recursive(file_content, parser_pos)
 	case "func":
-		break // Find matching (), then, Repeat the function
-	default:
-		return parser_pos
+		parser_pos = find_next_type_recursive(file_content, parser_pos)
 	}
+	return parser_pos
 }
 
 func find_next_type(file_content string, parser_pos int) (int, string) {
 	end_pos := find_next_type_recursive(file_content, parser_pos)
-	return file_content[parser_pos:end_pos]
+	return end_pos, file_content[parser_pos:end_pos]
 }
 
 func find_package_name(file_content string, parser_pos int) (int, string) {
