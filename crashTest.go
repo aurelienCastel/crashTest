@@ -1,3 +1,6 @@
+// TODO: Handle unnamed arguments
+// TODO: doesn't work on anonymous functions
+// TODO: doesn't work on functions not declared in the outer scope of the file.
 // TODO: for now the program assume you don't have syntax errors
 // should I add error handling of syntax error in the parsed code?
 
@@ -102,6 +105,18 @@ func is_valid_ident_char(char byte) bool {
 	return is_valid_ident_start(char) || is_digit(char)
 }
 
+func is_valid_identifier(token string) bool {
+	if len(token) == 0 || !is_valid_ident_start(token[0]) {
+		return false
+	}
+	for i := 1; i < len(token); i++ {
+		if !is_valid_ident_char(token[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func skip_spaces(file_content string, parser_pos int) int {
 	for ; parser_pos < len(file_content); parser_pos++ {
 		if !is_space(file_content[parser_pos]) {
@@ -111,13 +126,12 @@ func skip_spaces(file_content string, parser_pos int) int {
 	return parser_pos
 }
 
-// TODO: Should I do something when a string never end?
 func skip_string(file_content string, parser_pos int) int {
 	var string_start byte = file_content[parser_pos]
 
-	// Handle the case of \ in strings
 	if string_start == '"' {
 		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
+			// Handle the case of \ in interpreted strings
 			if file_content[parser_pos] == '\\' {
 				parser_pos++
 				continue
@@ -136,7 +150,6 @@ func skip_string(file_content string, parser_pos int) int {
 	return parser_pos
 }
 
-// TODO: Should I do something when a comment never end?
 func skip_comment(file_content string, parser_pos int) int {
 	comment_map := map[string]string{
 		"//": "\n",
@@ -169,6 +182,9 @@ func skip_non_code(file_content string, parser_pos int) int {
 	return new_pos
 }
 
+// Move to the character after the target and return true,
+// or move to the end of the file and return false
+// (doesn't skip 'non code')
 func match(target string, file_content string, parser_pos int) (int, bool) {
 	var i int = 0
 
@@ -185,6 +201,9 @@ func match(target string, file_content string, parser_pos int) (int, bool) {
 	return parser_pos, false
 }
 
+// Move to the character after the target and return true,
+// or move to the end of the file and return false
+// (look for target only in code, not in strings or comments)
 func match_token(target string, file_content string, parser_pos int) (int, bool) {
 	var token string
 
@@ -198,8 +217,6 @@ func match_token(target string, file_content string, parser_pos int) (int, bool)
 }
 
 // You should call this BEFORE the parser_pos is on an opening token.
-// TODO: closing don't match opening -> the parsed code have a syntax error
-// opening never found -> there is a problem with MY code
 func match_closing(opening string, closing string, file_content string, parser_pos int) (int, bool) {
 	var i int = 0
 	var j int = 0
@@ -221,7 +238,7 @@ func match_closing(opening string, closing string, file_content string, parser_p
 			if j == len(closing) {
 				nesting_level--
 				if nesting_level == 0 {
-					return parser_pos, true
+					return parser_pos + 1, true
 				}
 				i = 0
 				j = 0
@@ -233,7 +250,6 @@ func match_closing(opening string, closing string, file_content string, parser_p
 	return parser_pos, false
 }
 
-// You should skip non-code before calling this
 func find_next_token(file_content string, parser_pos int) (int, string) {
 	var token []byte
 
@@ -265,6 +281,8 @@ func find_next_type_recursive(file_content string, parser_pos int) int {
 	var token string
 	parser_pos, token = find_next_token(file_content, parser_pos)
 	switch token {
+	case ")", ",":
+		return parser_pos - 1
 	case "[":
 		{
 			parser_pos, _ = match_closing(token, "]", file_content, parser_pos-1)
@@ -275,21 +293,14 @@ func find_next_type_recursive(file_content string, parser_pos int) int {
 			parser_pos, _ = match_closing(token, ")", file_content, parser_pos-1)
 			parser_pos = find_next_type_recursive(file_content, parser_pos)
 		}
-	case ".":
-		parser_pos = find_next_type_recursive(file_content, parser_pos)
-	case "*":
-		parser_pos = find_next_type_recursive(file_content, parser_pos)
-	case "map":
-		parser_pos = find_next_type_recursive(file_content, parser_pos)
-	case "chan":
-		parser_pos = find_next_type_recursive(file_content, parser_pos)
-	case "func":
+	default:
 		parser_pos = find_next_type_recursive(file_content, parser_pos)
 	}
 	return parser_pos
 }
 
 func find_next_type(file_content string, parser_pos int) (int, string) {
+	parser_pos = skip_spaces(file_content, parser_pos)
 	end_pos := find_next_type_recursive(file_content, parser_pos)
 	return end_pos, file_content[parser_pos:end_pos]
 }
@@ -315,26 +326,30 @@ func find_function(file_content string, parser_pos int) (int, Callable) {
 		if token == ")" {
 			break // Stop at the end of arguments
 		}
+		// If argument.name is not an identifier its a type,
+		// the argument is unnamed
+		if !is_valid_identifier(argument.name) {
+			parser_pos -= len(argument.name)
+			argument.name = ""
+		}
 		parser_pos, argument.name = find_next_token(file_content, parser_pos)
 		if argument.name == ")" {
 			break // Stop at the end of arguments
 		}
-		parser_pos, argument._type = find_next_token(file_content, parser_pos)
+		parser_pos, argument._type = find_next_type(file_content, parser_pos)
+		// if argument._type is "" it means the identifier in
+		// argument.name is in fact a type and
+		// the argument is unnamed
+		if argument._type == "" {
+			argument._type = argument.name
+			argument.name = ""
+		}
 
 		function.arguments = append(function.arguments, argument)
 	}
 	return parser_pos, function
 }
 
-// TODO: handle pointers in arguments types
-// TODO: handle array in arguments types
-// TODO: handle multidimentional array in arguments types
-// TODO: handle slice in arguments types ?
-// TODO: handle map in arguments types
-// TODO: handle multidimentional map in arguments types
-// TODO: handle channel in arguments types
-// TODO: handle function in arguments types
-// TODO: handle variadic arguments
 func find_method(file_content string, parser_pos int) (int, Method) {
 	var method Method = new_method()
 	var argument Argument
@@ -342,7 +357,7 @@ func find_method(file_content string, parser_pos int) (int, Method) {
 
 	parser_pos, token = find_next_token(file_content, parser_pos) // Skip '('
 	parser_pos, method.receiver.name = find_next_token(file_content, parser_pos)
-	parser_pos, method.receiver._type = find_next_token(file_content, parser_pos)
+	parser_pos, method.receiver._type = find_next_type(file_content, parser_pos)
 
 	for {
 		parser_pos, token = find_next_token(file_content, parser_pos) // Skip '(' | ',' | ')'
@@ -350,10 +365,22 @@ func find_method(file_content string, parser_pos int) (int, Method) {
 			break // Stop at the end of arguments
 		}
 		parser_pos, argument.name = find_next_token(file_content, parser_pos)
+		// If argument.name is not an identifier its a type,
+		// the argument is unnamed
+		if !is_valid_identifier(argument.name) {
+			parser_pos -= len(argument.name)
+			argument.name = ""
+		}
 		if argument.name == ")" {
 			break // Stop at the end of arguments
 		}
-		parser_pos, argument._type = find_next_token(file_content, parser_pos)
+		parser_pos, argument._type = find_next_type(file_content, parser_pos)
+		// if argument._type is "" it means the identifier in
+		// argument.name is in fact a type and
+		// the argument is unnamed
+		if argument._type == "" {
+			argument._type = argument.name
+		}
 
 		method.arguments = append(method.arguments, argument)
 	}
@@ -371,11 +398,16 @@ func find_callable(file_content string, parser_pos int) (int, Callable) {
 	declaration_start, matched = match_token("func", file_content, parser_pos)
 
 	if matched {
-		_, function_opener = find_next_token(file_content, declaration_start)
-		if function_opener == "(" {
-			parser_pos, callable = find_method(file_content, declaration_start)
+		if file_content[declaration_start-5] == '\n' {
+			_, function_opener = find_next_token(file_content, declaration_start)
+			if function_opener == "(" {
+				parser_pos, callable = find_method(file_content, declaration_start)
+			} else {
+				parser_pos, callable = find_function(file_content, declaration_start)
+			}
+			return parser_pos, callable
 		} else {
-			parser_pos, callable = find_function(file_content, declaration_start)
+			return find_callable(file_content, declaration_start)
 		}
 	}
 	return declaration_start, callable
@@ -406,6 +438,34 @@ func generate_test(test_info TestInfo) []byte {
 	bytes := make([]byte, 5)
 
 	return bytes
+}
+
+func mapTest(test map[string]string) map[string]string {
+	return test
+}
+
+func arrayTest(test []string) []string {
+	return test
+}
+
+func pointerTest(test *string) *string {
+	return test
+}
+
+func variadicTest(test ...string) []string {
+	return test
+}
+
+func chanTest(test chan int) chan int {
+	return test
+}
+
+func funcTest(test func(i int) int) func(i int) int {
+	return test
+}
+
+func nestedTest(test ...*map[*[][]int][]map[chan []string]*string) []*map[*[][]int][]map[chan []string]*string {
+	return test
 }
 
 func main() {
