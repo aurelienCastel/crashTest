@@ -1,4 +1,5 @@
-// TODO: Handle unnamed arguments
+// TODO: Find a way to not try to access an index that is outside the file_content
+// without adding a lot of check
 // TODO: doesn't work on anonymous functions
 // TODO: doesn't work on functions not declared in the outer scope of the file.
 // TODO: for now the program assume you don't have syntax errors
@@ -32,7 +33,11 @@ func (function Function) call_string() string {
 
 	call_string += function.name + "("
 	for _, argument := range function.arguments {
-		call_string += argument.name + " " + argument._type
+		var name string = argument.name
+		if argument.name == "" {
+			name = "-UNNAMED-"
+		}
+		call_string += name + " " + argument._type
 		i++
 		if i < len(function.arguments) {
 			call_string += ", "
@@ -61,7 +66,11 @@ func (method Method) call_string() string {
 	call_string += "(" + method.receiver.name + " " + method.receiver._type + ")"
 	call_string += "." + method.name + "("
 	for _, argument := range method.arguments {
-		call_string += argument.name + " " + argument._type
+		var name string = argument.name
+		if argument.name == "" {
+			name = "-UNNAMED-"
+		}
+		call_string += name + " " + argument._type
 		i++
 		if i < len(method.arguments) {
 			call_string += ", "
@@ -127,10 +136,15 @@ func skip_spaces(file_content string, parser_pos int) int {
 }
 
 func skip_string(file_content string, parser_pos int) int {
+	if parser_pos >= len(file_content) {
+		return parser_pos
+	}
+
 	var string_start byte = file_content[parser_pos]
 
 	if string_start == '"' {
-		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
+		parser_pos++
+		for ; parser_pos < len(file_content); parser_pos++ {
 			// Handle the case of \ in interpreted strings
 			if file_content[parser_pos] == '\\' {
 				parser_pos++
@@ -141,7 +155,8 @@ func skip_string(file_content string, parser_pos int) int {
 			}
 		}
 	} else if string_start == '`' {
-		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
+		parser_pos++
+		for ; parser_pos < len(file_content); parser_pos++ {
 			if file_content[parser_pos] == string_start {
 				return parser_pos + 1
 			}
@@ -151,6 +166,10 @@ func skip_string(file_content string, parser_pos int) int {
 }
 
 func skip_comment(file_content string, parser_pos int) int {
+	if parser_pos >= len(file_content) {
+		return parser_pos
+	}
+
 	comment_map := map[string]string{
 		"//": "\n",
 		"/*": "*/",
@@ -254,6 +273,11 @@ func find_next_token(file_content string, parser_pos int) (int, string) {
 	var token []byte
 
 	parser_pos = skip_non_code(file_content, parser_pos)
+
+	if parser_pos >= len(file_content) {
+		return parser_pos, ""
+	}
+
 	if is_valid_ident_start(file_content[parser_pos]) {
 		token = append(token, file_content[parser_pos])
 		for parser_pos++; parser_pos < len(file_content); parser_pos++ {
@@ -326,15 +350,15 @@ func find_function(file_content string, parser_pos int) (int, Callable) {
 		if token == ")" {
 			break // Stop at the end of arguments
 		}
+		parser_pos, argument.name = find_next_token(file_content, parser_pos)
+		if argument.name == ")" {
+			break // Stop at the end of arguments
+		}
 		// If argument.name is not an identifier its a type,
 		// the argument is unnamed
 		if !is_valid_identifier(argument.name) {
 			parser_pos -= len(argument.name)
 			argument.name = ""
-		}
-		parser_pos, argument.name = find_next_token(file_content, parser_pos)
-		if argument.name == ")" {
-			break // Stop at the end of arguments
 		}
 		parser_pos, argument._type = find_next_type(file_content, parser_pos)
 		// if argument._type is "" it means the identifier in
@@ -365,14 +389,14 @@ func find_method(file_content string, parser_pos int) (int, Method) {
 			break // Stop at the end of arguments
 		}
 		parser_pos, argument.name = find_next_token(file_content, parser_pos)
+		if argument.name == ")" {
+			break // Stop at the end of arguments
+		}
 		// If argument.name is not an identifier its a type,
 		// the argument is unnamed
 		if !is_valid_identifier(argument.name) {
 			parser_pos -= len(argument.name)
 			argument.name = ""
-		}
-		if argument.name == ")" {
-			break // Stop at the end of arguments
 		}
 		parser_pos, argument._type = find_next_type(file_content, parser_pos)
 		// if argument._type is "" it means the identifier in
@@ -440,34 +464,6 @@ func generate_test(test_info TestInfo) []byte {
 	return bytes
 }
 
-func mapTest(test map[string]string) map[string]string {
-	return test
-}
-
-func arrayTest(test []string) []string {
-	return test
-}
-
-func pointerTest(test *string) *string {
-	return test
-}
-
-func variadicTest(test ...string) []string {
-	return test
-}
-
-func chanTest(test chan int) chan int {
-	return test
-}
-
-func funcTest(test func(i int) int) func(i int) int {
-	return test
-}
-
-func nestedTest(test ...*map[*[][]int][]map[chan []string]*string) []*map[*[][]int][]map[chan []string]*string {
-	return test
-}
-
 func main() {
 	if len(os.Args) < 2 {
 		panic("You need to give a file name as an argument.")
@@ -488,19 +484,4 @@ func main() {
 	for _, callable := range test_info.callables {
 		fmt.Println(callable.call_string())
 	}
-
-	// Create temp dir?
-
-	// if strings.HasSuffix(file_name, ".go") {
-	// 	// Maybe use a temp file instead?
-	// 	err = ioutil.WriteFile("crash_"+file_name,
-	// 		generate_test_file_content(PACKAGE_NAME, FUNCTIONS),
-	// 		'w')
-
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// } else {
-	// 	panic("You need to give a .go file name as an argument.")
-	// }
 }
