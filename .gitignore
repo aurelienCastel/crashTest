@@ -1,3 +1,6 @@
+# Log files
+*.txt
+
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
@@ -6,6 +9,7 @@
 # Folders
 _obj
 _test
+fileToTest/
 
 # Architecture specific extensions/prefixes
 *.[568vq]
