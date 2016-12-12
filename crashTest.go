@@ -48,13 +48,69 @@ func WriteFileInfo(file os.File, fileInfo parser.FileInfo) {
 	}
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		panic("You need to give a file name as an argument.")
+func Check(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func ParsableFileNamesInCurrentDirectory() []string {
+	var fileNames []string = FileNamesInCurrentDirectory()
+	var parsableFileNames []string
+
+	for _, fileName := range fileNames {
+		if parser.GetFileExtension(fileName) == "go" {
+			parsableFileNames = append(parsableFileNames, fileName)
+		}
 	}
 
+	return parsableFileNames
+}
+
+func FileNamesInCurrentDirectory() []string {
+	var fileNames []string
+	var directoryName string
+	var directory *os.File
+	var err error
+
+	directoryName, err = os.Getwd()
+	Check(err)
+
+	directory = getDirNamed(directoryName)
+	fileNames = FileNamesInDirectory(directory)
+
+	return fileNames
+}
+
+func FileNamesInDirectory(directory *os.File) []string {
+	var fileNames []string
+	var err error
+
+	fileNames, err = directory.Readdirnames(0)
+	Check(err)
+
+	return fileNames
+}
+
+func getDirNamed(directoryName string) *os.File {
+	var currentDir *os.File
+	var err error
+
+	currentDir, err = os.Open(directoryName)
+	Check(err)
+
+	return currentDir
+}
+
+func main() {
 	var fileInfos []parser.FileInfo = make([]parser.FileInfo, 0, 20)
-	var fileNames []string = os.Args[1:len(os.Args)]
+	var fileNames []string
+
+	if len(os.Args) < 2 {
+		fileNames = ParsableFileNamesInCurrentDirectory()
+	} else {
+		fileNames = os.Args[1:len(os.Args)]
+	}
 
 	for _, fileName := range fileNames {
 		fileInfos = append(fileInfos, parser.GetFileInfo(fileName))
