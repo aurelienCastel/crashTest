@@ -1,20 +1,19 @@
 package log
 
 import "os"
-import "../parser"
+import "github.com/aurelienCastel/crashTest/parser"
+import "github.com/aurelienCastel/errorUtil"
 
 func WriteInfos(fileName string, fileInfos []parser.FileInfo) {
 	file, err := os.Create(fileName)
-
-	if err != nil {
-		panic(err)
-	}
-
-	defer file.Close()
+	errorUtil.Check(err)
 
 	for _, fileInfo := range fileInfos {
 		WriteInfo(*file, fileInfo)
 	}
+
+	err = file.Close()
+	errorUtil.Check(err)
 }
 
 func WriteInfo(file os.File, fileInfo parser.FileInfo) {
@@ -30,8 +29,5 @@ func WriteInfo(file os.File, fileInfo parser.FileInfo) {
 	infoToWrite += "\n"
 
 	_, err := file.WriteString(infoToWrite)
-
-	if err != nil {
-		panic(err)
-	}
+	errorUtil.Check(err)
 }

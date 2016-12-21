@@ -1,3 +1,4 @@
+// TODO: Add custom errors for when unexisting files / directory / options are specified
 // TODO: maybe replace strings by []byte when parsing the file?
 // TODO: call the program with package/s as argument/s
 
@@ -13,55 +14,46 @@ import "fmt"
 
 import "github.com/aurelienCastel/fileDir"
 import "github.com/aurelienCastel/stringUtil"
-import "github.com/aurelienCastel/sliceUtil"
 import "github.com/aurelienCastel/errorUtil"
 
-import "./parser"
-import "./log"
+import "github.com/aurelienCastel/crashTest/parser"
+import "github.com/aurelienCastel/crashTest/log"
 
 func FileNamesToParse(args []string, extensions []string) []string {
 	var fileNames []string
 	var file *os.File
 	var err error
+	var currentDir *os.File = fileDir.CurrentDir()
 
-	if sliceUtil.ContainsString(args, ":rec") {
-		if len(args) < 2 {
-			file = fileDir.CurrentDir()
-			fileNames = fileDir.NamesInRecDirWithExts(file, extensions)
-		} else {
-			for _, fileName := range os.Args[1:len(os.Args)] {
-				if fileDir.NameIsDir(fileName) {
-					file, err = os.Open(fileName)
-					errorUtil.Check(err)
-					err = file.Close()
-					errorUtil.Check(err)
-					fileNames = append(fileNames, fileDir.NamesInRecDirWithExts(file, extensions)...)
-				} else {
-					if stringUtil.HasOneOfSuffixes(fileName, extensions) {
+	if len(args) == 0 {
+		fileNames = fileDir.RelativeNamesInDirWithExts(currentDir, extensions)
+	} else {
+		if args[0] == "rec:" {
+			if len(args) == 1 {
+				fileNames = fileDir.RelativeNamesInRecDirWithExts(currentDir, extensions)
+			} else {
+				for _, fileName := range args[1:len(args)] {
+					if fileDir.NameIsDir(fileName) {
+						file, err = os.Open(fileName)
+						errorUtil.Check(err)
+						fileNames = append(fileNames, fileDir.RelativeNamesInRecDirWithExts(file, extensions)...)
+					} else if stringUtil.HasOneOfSuffixes(fileName, extensions) {
 						fileNames = append(fileNames, fileName)
 					} else {
 						fmt.Printf("%s is written in a language not yet supported.", fileName)
 					}
 				}
 			}
-		}
-	} else {
-		if len(os.Args) < 2 {
-			fileNames = fileDir.NamesInDirWithExt(fileDir.CurrentDir(), "go")
 		} else {
-			for _, fileName := range os.Args[1:len(os.Args)] {
+			for _, fileName := range args {
 				if fileDir.NameIsDir(fileName) {
 					file, err = os.Open(fileName)
 					errorUtil.Check(err)
-					err = file.Close()
-					errorUtil.Check(err)
-					fileNames = append(fileNames, fileDir.NamesInDirWithExt(file, "go")...)
+					fileNames = append(fileNames, fileDir.RelativeNamesInDirWithExts(file, extensions)...)
+				} else if stringUtil.HasOneOfSuffixes(fileName, extensions) {
+					fileNames = append(fileNames, fileName)
 				} else {
-					if stringUtil.HasOneOfSuffixes(fileName, extensions) {
-						fileNames = append(fileNames, fileName)
-					} else {
-						fmt.Printf("%s is written in a language not yet supported.", fileName)
-					}
+					fmt.Printf("%s is written in a language not yet supported.", fileName)
 				}
 			}
 		}
@@ -75,7 +67,7 @@ func main() {
 	var fileNames []string
 	var fileInfos []parser.FileInfo = make([]parser.FileInfo, 0, 20)
 
-	fileNames = FileNamesToParse(os.Args, extensions)
+	fileNames = FileNamesToParse(os.Args[1:len(os.Args)], extensions)
 
 	for _, fileName := range fileNames {
 		fileInfos = append(fileInfos, parser.GetFileInfo(fileName))

@@ -1,6 +1,7 @@
 package parser
 
 import "io/ioutil"
+import "github.com/aurelienCastel/stringUtil"
 
 func IsSpace(char byte) bool {
 	return char == ' ' || char == '\t' || char == '\n'
@@ -36,15 +37,6 @@ func IsValidIdentifier(token string) bool {
 		}
 	}
 	return true
-}
-
-func GetFileExtension(fileName string) string {
-	for i := len(fileName) - 1; i > -1; i-- {
-		if fileName[i] == '.' {
-			return fileName[i+1 : len(fileName)]
-		}
-	}
-	return ""
 }
 
 func SkipSpaces(fileContent string, parserPos int) int {
@@ -226,7 +218,7 @@ func GetFileInfo(fileName string) FileInfo {
 	}
 
 	fileInfo.FileName = fileName
-	fileInfo.Language = GetFileExtension(fileName)
+	fileInfo.Language = stringUtil.FileExtension(fileName)
 	parserPos, fileInfo.PackageName = FindPackageName(string(fileContent), parserPos)
 
 	var function Callable
